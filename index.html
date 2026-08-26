@@ -130,10 +130,12 @@ async function load(){
    return {manager,short,team,id,game,stats};
   });
   rows.sort((a,b)=>{
-   const rankState=x=>x.stats?.state==='Final'?2:x.stats?.state==='Live'?1:0;
-   if(rankState(a)!==rankState(b)) return rankState(b)-rankState(a);
+   // Teams that haven't started (no stats yet) always sort to the bottom.
    if(!a.stats&&!b.stats) return a.manager.localeCompare(b.manager);
    if(!a.stats) return 1;if(!b.stats)return -1;
+   // Among teams that have started (live or final), rank purely by
+   // runs/hits/runs-allowed — a game being Final doesn't outrank a
+   // Live game, since a live team can still catch up or overtake.
    return (b.stats.runs-a.stats.runs)||(b.stats.hits-a.stats.hits)||(a.stats.allowed-b.stats.allowed)||a.manager.localeCompare(b.manager);
   });
   document.getElementById('board').innerHTML=rows.map((r,i)=>`<div class="row ${i===0?'top':''}"><div class="rank">${i+1}</div><div><div class="name">${r.manager}</div><div class="team">${r.short}</div></div><div class="metric"><strong>${r.stats?r.stats.runs:'—'}</strong></div><div class="metric"><strong>${r.stats?r.stats.hits:'—'}</strong></div><div class="metric allow"><strong>${r.stats?r.stats.allowed:'—'}</strong></div><div class="status">${r.stats?statusText(r.game,r.id):'No game found'}</div></div>`).join('');
