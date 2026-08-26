@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Fantasy Draft Lottery</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17202a;background:#f4f6f8}*{box-sizing:border-box}body{margin:0}.wrap{max-width:1050px;margin:0 auto;padding:28px 18px 48px}.hero{background:#111827;color:#fff;border-radius:20px;padding:28px;box-shadow:0 10px 30px #0002}.hero h1{margin:0 0 8px;font-size:clamp(28px,5vw,44px)}.hero p{margin:0;color:#cbd5e1}.toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;margin:18px 0;flex-wrap:wrap}.pill{padding:8px 12px;border-radius:999px;background:#fff;border:1px solid #dbe2ea;font-size:13px}.live{display:inline-flex;align-items:center;gap:7px;font-weight:700}.dot{width:9px;height:9px;border-radius:50%;background:#16a34a;box-shadow:0 0 0 4px #16a34a22}.dot.off{background:#94a3b8;box-shadow:none}.table{background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 5px 18px #0000000a}.row{display:grid;grid-template-columns:58px minmax(180px,1.6fr) 110px 90px 120px 120px;gap:10px;align-items:center;padding:14px 16px;border-top:1px solid #eef2f6}.row.header{border-top:0;background:#f8fafc;color:#64748b;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}.row.top{background:#fffbeb}.rank{font-size:22px;font-weight:900}.name{font-weight:800}.team{color:#64748b;font-size:13px;margin-top:2px}.metric{text-align:center;font-variant-numeric:tabular-nums}.metric strong{font-size:18px}.status{font-size:12px;color:#64748b}.rules{margin-top:18px;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:18px}.rules h2{font-size:16px;margin:0 0 10px}.rules ol{margin:0;padding-left:22px;color:#475569}.note{font-size:12px;color:#64748b;margin-top:10px}.error{padding:14px;border-radius:12px;background:#fee2e2;color:#991b1b;margin-top:12px}.empty{padding:32px;text-align:center;color:#64748b}@media(max-width:760px){.row{grid-template-columns:42px minmax(130px,1fr) 65px 65px 80px}.row .status{display:none}.row.header{grid-template-columns:42px minmax(130px,1fr) 65px 65px 80px}.row .allow{display:none}.row.header .allow{display:none}.team{font-size:12px}.metric strong{font-size:16px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<section class="hero"><h1>🏈 Fantasy Football Draft Lottery</h1><p>Draft order is determined by today’s MLB performance. The board updates automatically as games progress.</p></section>
+<div class="toolbar"><div class="pill"><span class="live"><span id="dot" class="dot"></span><span id="liveText">Connecting to MLB…</span></span></div><div class="pill" id="updated">Last updated —</div></div>
+<div id="error"></div>
+<div class="table">
+  <div class="row header"><div>Pick</div><div>Manager / MLB Team</div><div class="metric">Runs</div><div class="metric">Hits</div><div class="metric allow">Runs Allowed</div><div>Status</div></div>
+  <div id="board"><div class="empty">Loading today’s MLB scores…</div></div>
+</div>
+<div class="rules"><h2>Draft order rules</h2><ol><li><strong>Runs scored</strong> — most runs gets the highest pick.</li><li><strong>Hits</strong> — first tiebreaker.</li><li><strong>Runs allowed</strong> — second tiebreaker; fewer is better.</li></ol><div class="note">Teams that have not started are shown below teams currently playing or finished. Final draft order locks naturally once all 12 assigned teams have completed their games.</div></div>
+</div>
+<script>
+const DRAFT_DATE = '2026-08-26';
+const REFRESH_MS = 15000;
+const assignments = [
+ ['Andrew','Orioles','Baltimore Orioles'],['Connor','Diamondbacks','Arizona Diamondbacks'],['Derek','Royals','Kansas City Royals'],['Hannan','Giants','San Francisco Giants'],['Kasey','Brewers','Milwaukee Brewers'],['Kory','Mariners','Seattle Mariners'],['Logan','Rangers','Texas Rangers'],['Patrick','Marlins','Miami Marlins'],['Tania','Guardians','Cleveland Guardians'],['Tyler O','Yankees','New York Yankees'],['Will','Braves','Atlanta Braves'],['Tyler H','Padres','San Diego Padres']
+];
+const teamIds = { 'Baltimore Orioles':110,'Arizona Diamondbacks':109,'Kansas City Royals':118,'San Francisco Giants':137,'Milwaukee Brewers':158,'Seattle Mariners':136,'Texas Rangers':140,'Miami Marlins':146,'Cleveland Guardians':114,'New York Yankees':147,'Atlanta Braves':144,'San Diego Padres':135 };
+const byId = Object.fromEntries(Object.entries(teamIds).map(([n,id])=>[id,n]));
+const managers = Object.fromEntries(assignments.map(([m,s,n])=>[n,{manager:m,short:s,team:n,id:teamIds[n]}]));
+function statusText(g, teamId){
+ const ls=g.linescore, st=g.status?.detailedState || g.status?.abstractGameState || 'Scheduled';
+ if(st==='Final' || g.status?.abstractGameState==='Final') return 'Final';
+ if(g.status?.abstractGameState==='Live' || ['In Progress','Delayed','Warmup'].includes(st)) return st;
+ const side = g.teams?.away?.team?.id===teamId?'away':'home';
+ return g.gameDate ? new Date(g.gameDate).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}) : 'Scheduled';
+}
+function getStats(g, id){
+ const side = g.teams?.away?.team?.id===id?'away':g.teams?.home?.team?.id===id?'home':null;
+ if(!side) return null;
+ const s=g.linescore;
+ return {runs:g.teams?.[side]?.score ?? s?.teams?.[side]?.runs ?? 0,hits:g.teams?.[side]?.hits ?? s?.teams?.[side]?.hits ?? 0,allowed:g.teams?.[side==='away'?'home':'away']?.score ?? s?.teams?.[side==='away'?'home':'away']?.runs ?? 0,state:g.status?.abstractGameState || 'Preview', detailed:g.status?.detailedState || 'Scheduled'};
+}
+async function load(){
+ try{
+  const url=`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${DRAFT_DATE}&hydrate=linescore`;
+  const data=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('MLB API returned '+r.status);return r.json()});
+  const games=(data.dates||[]).flatMap(d=>d.games||[]);
+  const rows=assignments.map(([manager,short,team])=>{
+   const id=teamIds[team]; const game=games.find(g=>g.teams?.away?.team?.id===id||g.teams?.home?.team?.id===id); const stats=game?getStats(game,id):null;
+   return {manager,short,team,id,game,stats};
+  });
+  rows.sort((a,b)=>{
+   const rankState=x=>x.stats?.state==='Final'?2:x.stats?.state==='Live'?1:0;
+   if(rankState(a)!==rankState(b)) return rankState(b)-rankState(a);
+   if(!a.stats&&!b.stats) return a.manager.localeCompare(b.manager);
+   if(!a.stats) return 1;if(!b.stats)return -1;
+   return (b.stats.runs-a.stats.runs)||(b.stats.hits-a.stats.hits)||(a.stats.allowed-b.stats.allowed)||a.manager.localeCompare(b.manager);
+  });
+  document.getElementById('board').innerHTML=rows.map((r,i)=>`<div class="row ${i===0?'top':''}"><div class="rank">${i+1}</div><div><div class="name">${r.manager}</div><div class="team">${r.short}</div></div><div class="metric"><strong>${r.stats?r.stats.runs:'—'}</strong></div><div class="metric"><strong>${r.stats?r.stats.hits:'—'}</strong></div><div class="metric allow"><strong>${r.stats?r.stats.allowed:'—'}</strong></div><div class="status">${r.stats?statusText(r.game,r.id):'No game found'}</div></div>`).join('');
+  const live=rows.filter(r=>r.stats?.state==='Live').length, done=rows.filter(r=>r.stats?.state==='Final').length;
+  document.getElementById('liveText').textContent=live?`${live} game${live===1?'':'s'} live · auto-refreshing`:done===12?'All games final · order complete':'Waiting for today’s games';
+  document.getElementById('dot').classList.toggle('off',!live);
+  document.getElementById('updated').textContent='Last updated '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit',second:'2-digit'});
+  document.getElementById('error').innerHTML='';
+ }catch(e){document.getElementById('error').innerHTML=`<div class="error">Couldn’t update MLB scores: ${e.message}. The app will keep retrying.</div>`;document.getElementById('liveText').textContent='Update failed — retrying';document.getElementById('dot').classList.add('off')}
+}
+load();setInterval(load,REFRESH_MS);
+</script>
+</body></html>
